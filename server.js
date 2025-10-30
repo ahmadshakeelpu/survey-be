@@ -16,6 +16,11 @@ app.use(bodyParser.json());
 app.use(morgan("dev")); // Log all HTTP requests
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+// Health check
+app.get("/api/health", (req, res) => {
+	res.json({ status: "ok", uptime: process.uptime(), timestamp: new Date().toISOString() });
+});
+
 // Create participant
 app.post("/api/participant", async (req, res) => {
 	try {

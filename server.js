@@ -47,6 +47,32 @@ app.post("/api/participant", async (req, res) => {
 	}
 });
 
+// Update demographics
+app.post("/api/demographics", async (req, res) => {
+	try {
+		const { participant_id, demographic } = req.body;
+
+		const { error } = await supabase
+			.from("participants")
+			.update({
+				age_category: demographic?.age,
+				gender: demographic?.gender,
+				nationality: demographic?.nationality,
+				education: demographic?.education,
+				occupation: demographic?.occupation,
+				recruitment_experience: demographic?.recruitment_experience,
+				recruitment_role: demographic?.recruitment_role,
+			})
+			.eq("id", participant_id);
+
+		if (error) throw error;
+		res.json({ ok: true });
+	} catch (err) {
+		console.error(err);
+		res.status(500).json({ error: "server error" });
+	}
+});
+
 // Save scales (attari, tai)
 app.post("/api/scales", async (req, res) => {
 	try {
@@ -234,18 +260,94 @@ app.post("/api/complete", async (req, res) => {
 	}
 });
 
-// Admin export
-app.get("/api/admin/export", async (req, res) => {
-	try {
-		const token = req.headers["x-admin-token"];
-		if (token !== process.env.ADMIN_EXPORT_TOKEN) return res.status(401).send("unauthorized");
+// Admin middleware
+const adminAuth = (req, res, next) => {
+	const token = req.headers["x-admin-token"];
+	if (token !== process.env.ADMIN_EXPORT_TOKEN) {
+		return res.status(401).json({ error: "unauthorized" });
+	}
+	next();
+};
 
+// Admin login
+app.post("/api/admin/login", async (req, res) => {
+	try {
+		const { password } = req.body;
+		if (password === process.env.ADMIN_EXPORT_TOKEN) {
+			res.json({ success: true, token: process.env.ADMIN_EXPORT_TOKEN });
+		} else {
+			res.status(401).json({ error: "Invalid password" });
+		}
+	} catch (err) {
+		console.error(err);
+		res.status(500).json({ error: "server error" });
+	}
+});
+
+// Admin list participants
+app.get("/api/admin/participants", adminAuth, async (req, res) => {
+	try {
+		const { data, error } = await supabase
+			.from("participants")
+			.select("*")
+			.order("consent_at", { ascending: false });
+
+		if (error) throw error;
+		res.json({ participants: data });
+	} catch (err) {
+		console.error(err);
+		res.status(500).json({ error: "server error" });
+	}
+});
+
+// Admin get participant details
+app.get("/api/admin/participants/:id", adminAuth, async (req, res) => {
+	try {
+		const { id } = req.params;
+		const { data, error } = await supabase.from("participants").select("*").eq("id", id).single();
+
+		if (error) throw error;
+		if (!data) return res.status(404).json({ error: "participant not found" });
+
+		res.json({ participant: data });
+	} catch (err) {
+		console.error(err);
+		res.status(500).json({ error: "server error" });
+	}
+});
+
+// Admin export
+app.get("/api/admin/export", adminAuth, async (req, res) => {
+	try {
 		const { data, error } = await supabase.from("participants").select("*");
 
 		if (error) throw error;
 		const csv = rowsToCsv(data);
 		res.setHeader("Content-Type", "text/csv");
+		res.setHeader("Content-Disposition", "attachment; filename=participants_export.csv");
 		res.send(csv);
+	} catch (err) {
+		console.error(err);
+		res.status(500).json({ error: "server error" });
+	}
+});
+
+// Admin stats
+app.get("/api/admin/stats", adminAuth, async (req, res) => {
+	try {
+		const { data, error } = await supabase.from("participants").select("*");
+
+		if (error) throw error;
+
+		const stats = {
+			total: data.length,
+			completed: data.filter((p) => p.completed).length,
+			control: data.filter((p) => p.condition === "control").length,
+			experimental: data.filter((p) => p.condition === "experimental").length,
+			excluded: data.filter((p) => p.screening_text?.toLowerCase() === "no").length,
+		};
+
+		res.json({ stats });
 	} catch (err) {
 		console.error(err);
 		res.status(500).json({ error: "server error" });

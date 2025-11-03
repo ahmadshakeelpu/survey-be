@@ -110,13 +110,23 @@ export function rowsToCsv(rows) {
 		"Screening Text",
 		"Baseline AI Use",
 		"Condition",
+	];
+
+	// Add chat columns (up to 3 rounds with user message and AI reply each)
+	const chatColumns = [];
+	for (let i = 1; i <= 3; i++) {
+		chatColumns.push(`Chat Round ${i} - User Message`);
+		chatColumns.push(`Chat Round ${i} - AI Reply`);
+		chatColumns.push(`Chat Round ${i} - Timestamp`);
+	}
+
+	const postColumns = [
 		"Post-Test AI Use",
 		"Post-Test Change Explanation",
 		"Completed",
-		"Total Chat Messages",
 	];
 
-	const headers = [...baseColumns, ...attariColumns, ...taiColumns, ...otherColumns];
+	const headers = [...baseColumns, ...attariColumns, ...taiColumns, ...otherColumns, ...chatColumns, ...postColumns];
 
 	const lines = [headers.map(escapeCSV).join(",")];
 
@@ -150,10 +160,26 @@ export function rowsToCsv(rows) {
 		values.push(row.screening_text || "");
 		values.push(row.baseline_use !== undefined ? row.baseline_use : "");
 		values.push(row.condition || "");
+
+		// Chat messages (up to 3 rounds)
+		const chat = row.chat || [];
+		for (let i = 1; i <= 3; i++) {
+			const chatEntry = chat.find((c) => c.round === i);
+			if (chatEntry) {
+				values.push(chatEntry.user_message || "");
+				values.push(chatEntry.reply || "");
+				values.push(chatEntry.ts ? new Date(chatEntry.ts).toLocaleString() : "");
+			} else {
+				values.push("");
+				values.push("");
+				values.push("");
+			}
+		}
+
+		// Post-test columns
 		values.push(row.post_use !== undefined ? row.post_use : "");
 		values.push(row.post_change || "");
 		values.push(row.completed ? "Yes" : "No");
-		values.push(row.chat ? row.chat.length : 0);
 
 		lines.push(values.map(escapeCSV).join(","));
 	}

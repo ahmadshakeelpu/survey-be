@@ -97,6 +97,7 @@ export function rowsToCsv(rows) {
 		"Occupation",
 		"Recruitment Experience",
 		"Recruitment Role",
+		"Prolific ID",
 	];
 
 	// Add ATTARI question columns
@@ -143,6 +144,7 @@ export function rowsToCsv(rows) {
 		values.push(formatDemographicValue("occupation", row.occupation));
 		values.push(row.recruitment_experience ? "Yes" : "No");
 		values.push(row.recruitment_role || "");
+		values.push(row.no_prolific_id ? "No Prolific ID" : row.prolific_id || "");
 
 		// ATTARI responses
 		const attari = row.attari || {};

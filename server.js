@@ -37,6 +37,8 @@ app.post("/api/participant", async (req, res) => {
 			occupation: demographic?.occupation,
 			recruitment_experience: demographic?.recruitment_experience,
 			recruitment_role: demographic?.recruitment_role,
+			prolific_id: demographic?.prolific_id,
+			no_prolific_id: demographic?.no_prolific_id,
 		});
 
 		if (error) throw error;
@@ -62,6 +64,8 @@ app.post("/api/demographics", async (req, res) => {
 				occupation: demographic?.occupation,
 				recruitment_experience: demographic?.recruitment_experience,
 				recruitment_role: demographic?.recruitment_role,
+				prolific_id: demographic?.prolific_id,
+				no_prolific_id: demographic?.no_prolific_id,
 			})
 			.eq("id", participant_id);
 

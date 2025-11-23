@@ -21,34 +21,92 @@ app.get("/api/health", (req, res) => {
 	res.json({ status: "ok", uptime: process.uptime(), timestamp: new Date().toISOString() });
 });
 
+// Test database connection
+app.get("/api/test-db", async (req, res) => {
+	try {
+		const { data, error } = await supabase.from("participants").select("id").limit(1);
+		if (error) {
+			console.error("Database test error:", error);
+			return res.status(500).json({ 
+				error: "Database connection failed", 
+				details: error.message,
+				code: error.code
+			});
+		}
+		res.json({ status: "ok", message: "Database connection successful", data });
+	} catch (err) {
+		console.error("Database test exception:", err);
+		res.status(500).json({ error: "Database test failed", details: err.message });
+	}
+});
+
 // Create participant
 app.post("/api/participant", async (req, res) => {
 	try {
 		const id = uuidv4();
 		const { consent_at, demographic } = req.body;
 
+		console.log("Creating participant with data:", { id, consent_at, demographic });
+
+		// Build participant data object, only including fields that exist
 		const participantData = {
 			id,
 			consent_at,
-			age_category: demographic?.age || null,
-			gender: demographic?.gender || null,
-			nationality: demographic?.nationality || null,
-			education: demographic?.education || null,
-			occupation: demographic?.occupation || null,
-			recruitment_experience: demographic?.recruitment_experience || false,
-			recruitment_role: demographic?.recruitment_role || null,
 		};
+
+		// Only add demographic fields if they exist and are not empty strings
+		if (demographic) {
+			if (demographic.age !== undefined && demographic.age !== "") {
+				participantData.age_category = demographic.age;
+			}
+			if (demographic.gender !== undefined && demographic.gender !== "") {
+				participantData.gender = demographic.gender;
+			}
+			if (demographic.nationality !== undefined && demographic.nationality !== "") {
+				participantData.nationality = demographic.nationality;
+			}
+			if (demographic.education !== undefined && demographic.education !== "") {
+				participantData.education = demographic.education;
+			}
+			if (demographic.occupation !== undefined && demographic.occupation !== "") {
+				participantData.occupation = demographic.occupation;
+			}
+			if (demographic.recruitment_experience !== undefined) {
+				participantData.recruitment_experience = demographic.recruitment_experience;
+			}
+			if (demographic.recruitment_role !== undefined && demographic.recruitment_role !== "") {
+				participantData.recruitment_role = demographic.recruitment_role;
+			}
+		}
+
+		console.log("Inserting participant data:", participantData);
 
 		const { data, error } = await supabase.from("participants").insert(participantData);
 
 		if (error) {
-			console.error("Supabase error creating participant:", error);
-			throw error;
+			console.error("Supabase error creating participant:", JSON.stringify(error, null, 2));
+			console.error("Error code:", error.code);
+			console.error("Error message:", error.message);
+			console.error("Error details:", error.details);
+			console.error("Error hint:", error.hint);
+			return res.status(500).json({ 
+				error: "server error", 
+				details: error.message,
+				code: error.code,
+				hint: error.hint
+			});
 		}
+
+		console.log("Participant created successfully:", id);
 		res.json({ participant_id: id });
 	} catch (err) {
-		console.error("Error creating participant:", err);
-		res.status(500).json({ error: "server error", details: err.message });
+		console.error("Unexpected error creating participant:", err);
+		console.error("Error stack:", err.stack);
+		res.status(500).json({ 
+			error: "server error", 
+			details: err.message,
+			stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+		});
 	}
 });
 

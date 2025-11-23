@@ -27,25 +27,28 @@ app.post("/api/participant", async (req, res) => {
 		const id = uuidv4();
 		const { consent_at, demographic } = req.body;
 
-		const { data, error } = await supabase.from("participants").insert({
+		const participantData = {
 			id,
 			consent_at,
-			age_category: demographic?.age,
-			gender: demographic?.gender,
-			nationality: demographic?.nationality,
-			education: demographic?.education,
-			occupation: demographic?.occupation,
-			recruitment_experience: demographic?.recruitment_experience,
-			recruitment_role: demographic?.recruitment_role,
-			prolific_id: demographic?.prolific_id,
-			no_prolific_id: demographic?.no_prolific_id,
-		});
+			age_category: demographic?.age || null,
+			gender: demographic?.gender || null,
+			nationality: demographic?.nationality || null,
+			education: demographic?.education || null,
+			occupation: demographic?.occupation || null,
+			recruitment_experience: demographic?.recruitment_experience || false,
+			recruitment_role: demographic?.recruitment_role || null,
+		};
 
-		if (error) throw error;
+		const { data, error } = await supabase.from("participants").insert(participantData);
+
+		if (error) {
+			console.error("Supabase error creating participant:", error);
+			throw error;
+		}
 		res.json({ participant_id: id });
 	} catch (err) {
-		console.error(err);
-		res.status(500).json({ error: "server error" });
+		console.error("Error creating participant:", err);
+		res.status(500).json({ error: "server error", details: err.message });
 	}
 });
 
@@ -54,26 +57,53 @@ app.post("/api/demographics", async (req, res) => {
 	try {
 		const { participant_id, demographic } = req.body;
 
-		const { error } = await supabase
-			.from("participants")
-			.update({
-				age_category: demographic?.age,
-				gender: demographic?.gender,
-				nationality: demographic?.nationality,
-				education: demographic?.education,
-				occupation: demographic?.occupation,
-				recruitment_experience: demographic?.recruitment_experience,
-				recruitment_role: demographic?.recruitment_role,
-				prolific_id: demographic?.prolific_id,
-				no_prolific_id: demographic?.no_prolific_id,
-			})
-			.eq("id", participant_id);
+		const updateData = {
+			age_category: demographic?.age || null,
+			gender: demographic?.gender || null,
+			nationality: demographic?.nationality || null,
+			education: demographic?.education || null,
+			occupation: demographic?.occupation || null,
+			recruitment_experience: demographic?.recruitment_experience || false,
+			recruitment_role: demographic?.recruitment_role || null,
+		};
 
-		if (error) throw error;
+		// Only include prolific_id fields if they are provided and not empty strings
+		if (demographic?.prolific_id !== undefined && demographic.prolific_id !== "") {
+			updateData.prolific_id = demographic.prolific_id;
+		}
+		if (demographic?.no_prolific_id !== undefined) {
+			updateData.no_prolific_id = demographic.no_prolific_id;
+		}
+
+		// Try to update, if prolific_id columns don't exist, update without them
+		const { error } = await supabase.from("participants").update(updateData).eq("id", participant_id);
+
+		if (error) {
+			// If error is about missing columns, try without prolific_id fields
+			if (error.message && (error.message.includes("prolific_id") || error.message.includes("column"))) {
+				console.warn("Prolific ID columns may not exist, updating without them:", error.message);
+				const updateDataWithoutProlific = { ...updateData };
+				delete updateDataWithoutProlific.prolific_id;
+				delete updateDataWithoutProlific.no_prolific_id;
+				
+				const { error: retryError } = await supabase
+					.from("participants")
+					.update(updateDataWithoutProlific)
+					.eq("id", participant_id);
+				
+				if (retryError) {
+					console.error("Supabase error updating demographics:", retryError);
+					throw retryError;
+				}
+			} else {
+				console.error("Supabase error updating demographics:", error);
+				throw error;
+			}
+		}
 		res.json({ ok: true });
 	} catch (err) {
-		console.error(err);
-		res.status(500).json({ error: "server error" });
+		console.error("Error updating demographics:", err);
+		res.status(500).json({ error: "server error", details: err.message });
 	}
 });
 

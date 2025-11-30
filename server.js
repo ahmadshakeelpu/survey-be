@@ -132,6 +132,9 @@ app.post("/api/demographics", async (req, res) => {
 		if (demographic?.no_prolific_id !== undefined) {
 			updateData.no_prolific_id = demographic.no_prolific_id;
 		}
+		if (demographic?.leading_position !== undefined) {
+			updateData.leading_position = demographic.leading_position;
+		}
 
 		// Try to update, if prolific_id columns don't exist, update without them
 		const { error } = await supabase.from("participants").update(updateData).eq("id", participant_id);
@@ -183,12 +186,22 @@ app.post("/api/scales", async (req, res) => {
 // Screening & baseline
 app.post("/api/screening", async (req, res) => {
 	try {
-		const { participant_id, screening_text, baseline_use } = req.body;
+		const { participant_id, screening_text, baseline_use, job_search_ai_use_before } = req.body;
 		const excluded = (screening_text || "").trim().toLowerCase() === "no";
+
+		const updateData = {
+			screening_text,
+			baseline_use,
+		};
+
+		// Only include job_search_ai_use_before if provided
+		if (job_search_ai_use_before !== undefined) {
+			updateData.job_search_ai_use_before = job_search_ai_use_before;
+		}
 
 		const { error: updateError } = await supabase
 			.from("participants")
-			.update({ screening_text, baseline_use })
+			.update(updateData)
 			.eq("id", participant_id);
 
 		if (updateError) throw updateError;
@@ -337,11 +350,22 @@ app.post("/api/chat", async (req, res) => {
 // Complete
 app.post("/api/complete", async (req, res) => {
 	try {
-		const { participant_id, post_use, post_change } = req.body;
+		const { participant_id, post_use, post_change, job_search_ai_use_after } = req.body;
+
+		const updateData = {
+			post_use,
+			post_change,
+			completed: true,
+		};
+
+		// Only include job_search_ai_use_after if provided
+		if (job_search_ai_use_after !== undefined) {
+			updateData.job_search_ai_use_after = job_search_ai_use_after;
+		}
 
 		const { error } = await supabase
 			.from("participants")
-			.update({ post_use, post_change, completed: true })
+			.update(updateData)
 			.eq("id", participant_id);
 
 		if (error) throw error;

@@ -125,7 +125,7 @@ app.post("/api/demographics", async (req, res) => {
 			recruitment_role: demographic?.recruitment_role || null,
 		};
 
-		// Only include prolific_id fields if they are provided and not empty strings
+		// Only include optional fields if they are provided
 		if (demographic?.prolific_id !== undefined && demographic.prolific_id !== "") {
 			updateData.prolific_id = demographic.prolific_id;
 		}
@@ -136,25 +136,35 @@ app.post("/api/demographics", async (req, res) => {
 			updateData.leading_position = demographic.leading_position;
 		}
 
-		// Try to update, if prolific_id columns don't exist, update without them
+		// Try to update, if columns don't exist, retry without optional fields
 		const { error } = await supabase.from("participants").update(updateData).eq("id", participant_id);
 
 		if (error) {
-			// If error is about missing columns, try without prolific_id fields
-			if (error.message && (error.message.includes("prolific_id") || error.message.includes("column"))) {
-				console.warn("Prolific ID columns may not exist, updating without them:", error.message);
-				const updateDataWithoutProlific = { ...updateData };
-				delete updateDataWithoutProlific.prolific_id;
-				delete updateDataWithoutProlific.no_prolific_id;
+			// If error is about missing columns, try without optional fields
+			if (error.code === 'PGRST204' || (error.message && error.message.includes("column"))) {
+				console.warn("Some columns may not exist in database, retrying with core fields only:", error.message);
+				
+				// Retry with only core fields
+				const coreUpdateData = {
+					age_category: demographic?.age || null,
+					gender: demographic?.gender || null,
+					nationality: demographic?.nationality || null,
+					education: demographic?.education || null,
+					occupation: demographic?.occupation || null,
+					recruitment_experience: demographic?.recruitment_experience || false,
+					recruitment_role: demographic?.recruitment_role || null,
+				};
 				
 				const { error: retryError } = await supabase
 					.from("participants")
-					.update(updateDataWithoutProlific)
+					.update(coreUpdateData)
 					.eq("id", participant_id);
 				
 				if (retryError) {
-					console.error("Supabase error updating demographics:", retryError);
+					console.error("Supabase error updating demographics (retry):", retryError);
 					throw retryError;
+				} else {
+					console.log("Demographics updated successfully (without optional fields)");
 				}
 			} else {
 				console.error("Supabase error updating demographics:", error);
@@ -204,7 +214,20 @@ app.post("/api/screening", async (req, res) => {
 			.update(updateData)
 			.eq("id", participant_id);
 
-		if (updateError) throw updateError;
+		if (updateError) {
+			// If column doesn't exist, retry without optional fields
+			if (updateError.code === 'PGRST204' || (updateError.message && updateError.message.includes("column"))) {
+				console.warn("job_search_ai_use_before column may not exist, retrying without it:", updateError.message);
+				const { error: retryError } = await supabase
+					.from("participants")
+					.update({ screening_text, baseline_use })
+					.eq("id", participant_id);
+				
+				if (retryError) throw retryError;
+			} else {
+				throw updateError;
+			}
+		}
 
 		if (excluded) return res.json({ excluded: true });
 
@@ -368,7 +391,21 @@ app.post("/api/complete", async (req, res) => {
 			.update(updateData)
 			.eq("id", participant_id);
 
-		if (error) throw error;
+		if (error) {
+			// If column doesn't exist, retry without optional fields
+			if (error.code === 'PGRST204' || (error.message && error.message.includes("column"))) {
+				console.warn("job_search_ai_use_after column may not exist, retrying without it:", error.message);
+				const { error: retryError } = await supabase
+					.from("participants")
+					.update({ post_use, post_change, completed: true })
+					.eq("id", participant_id);
+				
+				if (retryError) throw retryError;
+			} else {
+				throw error;
+			}
+		}
+		
 		res.json({ ok: true });
 	} catch (err) {
 		console.error(err);
